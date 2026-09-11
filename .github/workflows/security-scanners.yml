@@ -1,0 +1,156 @@
+name: Security Scanners
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: p/ci
+          generateSarif: "1"
+
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+
+      - name: Send Semgrep findings to Shuffle
+        if: always()
+        env:
+          SHUFFLE_WEBHOOK_URL: ${{ secrets.SHUFFLE_WEBHOOK_URL }}
+        run: |
+          if [ -f semgrep.sarif ]; then
+            curl --fail-with-body --silent --show-error \
+              -X POST \
+              -H "Content-Type: application/json" \
+              --data-binary @semgrep.sarif \
+              "$SHUFFLE_WEBHOOK_URL"
+          fi
+
+  trivy:
+    name: Trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Send Trivy findings to Shuffle
+        if: always()
+        env:
+          SHUFFLE_WEBHOOK_URL: ${{ secrets.SHUFFLE_WEBHOOK_URL }}
+        run: |
+          if [ -f trivy-results.sarif ]; then
+            curl --fail-with-body --silent --show-error \
+              -X POST \
+              -H "Content-Type: application/json" \
+              --data-binary @trivy-results.sarif \
+              "$SHUFFLE_WEBHOOK_URL"
+          fi
+
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Gitleaks SARIF scan
+        if: always()
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" \
+            zricethezav/gitleaks:latest \
+            detect \
+            --source=/repo \
+            --no-banner \
+            --report-format=sarif \
+            --report-path=/repo/gitleaks-results.sarif \
+            --exit-code=0
+
+      - name: Upload Gitleaks SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks-results.sarif
+
+      - name: Send Gitleaks findings to Shuffle
+        if: always()
+        env:
+          SHUFFLE_WEBHOOK_URL: ${{ secrets.SHUFFLE_WEBHOOK_URL }}
+        run: |
+          if [ -f gitleaks-results.sarif ]; then
+            curl --fail-with-body --silent --show-error \
+              -X POST \
+              -H "Content-Type: application/json" \
+              --data-binary @gitleaks-results.sarif \
+              "$SHUFFLE_WEBHOOK_URL"
+          fi
+
+  zap:
+    name: OWASP ZAP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Replace TARGET_URL with the application URL exposed to ZAP.
+      - name: Run OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.15.0
+        continue-on-error: true
+        with:
+          target: ${{ vars.ZAP_TARGET_URL }}
+          artifact_name: zap-results
+
+      - name: Send ZAP findings to Shuffle
+        if: always()
+        env:
+          SHUFFLE_WEBHOOK_URL: ${{ secrets.SHUFFLE_WEBHOOK_URL }}
+        run: |
+          ZAP_FILE=$(find . -type f \( \
+            -name "report_json.json" -o \
+            -name "*zap*.json" \
+          \) | head -n 1)
+
+          if [ -n "$ZAP_FILE" ]; then
+            curl --fail-with-body --silent --show-error \
+              -X POST \
+              -H "Content-Type: application/json" \
+              --data-binary @"$ZAP_FILE" \
+              "$SHUFFLE_WEBHOOK_URL"
+          else
+            echo "No ZAP JSON report found"
+          fi

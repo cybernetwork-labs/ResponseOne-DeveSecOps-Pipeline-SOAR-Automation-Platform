@@ -1,0 +1,92 @@
+name: Security Scanners
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: |
+          pip install semgrep
+          semgrep --config=auto --sarif --output=semgrep.sarif . || true
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+
+      - name: Send to Shuffle
+        run: |
+          curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"scan_type": "cve", "source": "semgrep", "status": "completed"}'
+
+  sca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          format: json
+          output: trivy-results.json
+
+      - name: Send to Shuffle
+        run: |
+          curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"scan_type": "cve", "source": "trivy", "status": "completed"}'
+
+  secrets_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send to Shuffle
+        run: |
+          curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"scan_type": "secret", "source": "gitleaks", "status": "completed"}'
+
+  dast:
+    runs-on: ubuntu-latest
+    services:
+      juice-shop:
+        image: bkimminich/juice-shop
+        ports:
+          - 3000:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for Juice Shop to be ready
+        run: |
+          for i in {1..15}; do
+            curl -sf http://localhost:3000 && break
+            echo "Waiting for Juice Shop..."
+            sleep 5
+          done
+
+      - name: Run ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://localhost:3000'
+
+      - name: Send to Shuffle
+        run: |
+          curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"scan_type": "owasp", "source": "zap", "status": "completed"}'

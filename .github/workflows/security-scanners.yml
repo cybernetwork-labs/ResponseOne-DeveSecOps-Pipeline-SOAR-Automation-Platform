@@ -117,4 +117,5 @@ jobs:
               curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
                 -H "Content-Type: application/json" \
                 -d "{\"scan_type\": \"owasp\", \"source\": \"zap\", \"alert_name\": \"$ALERT_NAME\", \"risk_level\": \"$RISK\", \"url\": \"http://localhost:3000\"}"
+            fi
           fi

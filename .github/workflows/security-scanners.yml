@@ -2,7 +2,7 @@ name: Security Scanners
 
 on:
   push:
-    branches: [main, scanner-payload-fix]
+    branches: [main]
 
 permissions:
   contents: read

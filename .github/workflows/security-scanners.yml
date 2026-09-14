@@ -134,8 +134,8 @@ jobs:
         run: |
           ZAP_FILE=$(find . -type f -name "report_json.json" -o -name "*zap*.json" | head -n 1)
           if [ -n "$ZAP_FILE" ]; then
-            ALERT_COUNT=$(jq '.site[0].alerts | length' "$ZAP_FILE" 2>/dev/null || echo 0)
-            if [ "$ALERT_COUNT" -gt 0 ]; then
+            HIGH_COUNT=$(jq '[.site[0].alerts[]? | select(.riskdesc | startswith("High"))] | length' "$ZAP_FILE" 2>/dev/null || echo 0)
+            if [ "$HIGH_COUNT" -gt 0 ]; then
               ALERT_NAME=$(jq -r '[.site[0].alerts[]? | select(.riskdesc | startswith("High"))][0].name' "$ZAP_FILE")
               RISK=$(jq -r '[.site[0].alerts[]? | select(.riskdesc | startswith("High"))][0].riskdesc' "$ZAP_FILE")
               curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \

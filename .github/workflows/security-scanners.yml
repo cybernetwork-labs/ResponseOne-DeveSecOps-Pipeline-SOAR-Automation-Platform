@@ -27,9 +27,14 @@ jobs:
 
       - name: Send to Shuffle
         run: |
-          curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d '{"scan_type": "cve", "source": "semgrep", "status": "completed"}'
+          FINDINGS=$(jq '.runs[0].results | length' semgrep.sarif 2>/dev/null || echo 0)
+          if [ "$FINDINGS" -gt 0 ]; then
+            RULE=$(jq -r '.runs[0].results[0].ruleId' semgrep.sarif)
+            FILE=$(jq -r '.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri' semgrep.sarif)
+            curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"scan_type\": \"cve\", \"source\": \"semgrep\", \"rule\": \"$RULE\", \"file\": \"$FILE\", \"repo\": \"${{ github.repository }}\"}"
+          fi
 
   sca:
     runs-on: ubuntu-latest
@@ -45,9 +50,13 @@ jobs:
 
       - name: Send to Shuffle
         run: |
-          curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d '{"scan_type": "cve", "source": "trivy", "status": "completed"}'
+          FINDINGS=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results.json 2>/dev/null || echo 0)
+          if [ "$FINDINGS" -gt 0 ]; then
+            CVE_ID=$(jq -r '[.Results[]?.Vulnerabilities[]?][0].VulnerabilityID' trivy-results.json)
+            curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"scan_type\": \"cve\", \"source\": \"trivy\", \"cve_id\": \"$CVE_ID\", \"repo\": \"${{ github.repository }}\"}"
+          fi
 
   secrets_scan:
     runs-on: ubuntu-latest
@@ -58,14 +67,21 @@ jobs:
 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
+        with:
+          report-format: json
+          report-path: gitleaks-results.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send to Shuffle
         run: |
-          curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d '{"scan_type": "secret", "source": "gitleaks", "status": "completed"}'
+          if [ -s gitleaks-results.json ] && [ "$(jq '. | length' gitleaks-results.json)" -gt 0 ]; then
+            REPO_FILE=$(jq -r '.[0].File' gitleaks-results.json)
+            LINE=$(jq -r '.[0].StartLine' gitleaks-results.json)
+            curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"scan_type\": \"secret\", \"source\": \"gitleaks\", \"file\": \"$REPO_FILE\", \"line\": \"$LINE\", \"repo\": \"${{ github.repository }}\"}"
+          fi
 
   dast:
     runs-on: ubuntu-latest
@@ -92,6 +108,14 @@ jobs:
 
       - name: Send to Shuffle
         run: |
-          curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d '{"scan_type": "owasp", "source": "zap", "status": "completed"}'
+          ZAP_FILE=$(find . -type f -name "report_json.json" -o -name "*zap*.json" | head -n 1)
+          if [ -n "$ZAP_FILE" ]; then
+            ALERT_COUNT=$(jq '.site[0].alerts | length' "$ZAP_FILE" 2>/dev/null || echo 0)
+            if [ "$ALERT_COUNT" -gt 0 ]; then
+              ALERT_NAME=$(jq -r '.site[0].alerts[0].name' "$ZAP_FILE")
+              RISK=$(jq -r '.site[0].alerts[0].riskdesc' "$ZAP_FILE")
+              curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
+                -H "Content-Type: application/json" \
+                -d "{\"scan_type\": \"owasp\", \"source\": \"zap\", \"alert_name\": \"$ALERT_NAME\", \"risk_level\": \"$RISK\", \"url\": \"http://localhost:3000\"}"
+            fi
+          fi

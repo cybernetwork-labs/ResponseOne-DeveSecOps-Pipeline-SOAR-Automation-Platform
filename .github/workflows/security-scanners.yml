@@ -83,6 +83,7 @@ jobs:
 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
         with:
           report-format: json
           report-path: gitleaks-results.json

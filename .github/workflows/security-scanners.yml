@@ -25,6 +25,12 @@ jobs:
         with:
           sarif_file: semgrep.sarif
 
+      - name: Store SARIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+
       - name: Send to Shuffle
         run: |
           FINDINGS=$(jq '.runs[0].results | length' semgrep.sarif 2>/dev/null || echo 0)

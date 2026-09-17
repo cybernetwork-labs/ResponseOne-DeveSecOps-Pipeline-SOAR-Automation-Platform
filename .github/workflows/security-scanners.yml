@@ -149,8 +149,8 @@ jobs:
             sleep 5
           done
 
-      - name: Run ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.14.0
+      - name: Run ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.14.0
         continue-on-error: true
         with:
           target: 'http://localhost:3000'

@@ -150,7 +150,7 @@ jobs:
           done
 
       - name: Run ZAP Full Scan
-        uses: zaproxy/action-full-scan@v0.14.0
+        uses: zaproxy/action-full-scan@v0.13.0
         continue-on-error: true
         with:
           target: 'http://localhost:3000'

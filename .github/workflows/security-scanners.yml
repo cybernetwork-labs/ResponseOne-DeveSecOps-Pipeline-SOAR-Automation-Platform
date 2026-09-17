@@ -84,9 +84,9 @@ jobs:
 
       - name: Send to Shuffle
         run: |
-          FINDINGS=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results.json 2>/dev/null || echo 0)
+          FINDINGS=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-results.json 2>/dev/null || echo 0)
           if [ "$FINDINGS" -gt 0 ]; then
-            CVE_ID=$(jq -r '[.Results[]?.Vulnerabilities[]?][0].VulnerabilityID' trivy-results.json)
+            CVE_ID=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")][0].VulnerabilityID // "N/A"' trivy-results.json)
             curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
               -H "Content-Type: application/json" \
               -d "{\"scan_type\": \"cve\", \"source\": \"trivy\", \"cve_id\": \"$CVE_ID\", \"repo\": \"${{ github.repository }}\"}"

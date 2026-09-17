@@ -33,18 +33,38 @@ jobs:
 
       - name: Send to Shuffle
         run: |
-          FINDINGS=$(jq '.runs[0].results | length' semgrep.sarif 2>/dev/null || echo 0)
-          if [ "$FINDINGS" -gt 0 ]; then
-            RULE=$(jq -r '.runs[0].results[0].ruleId' semgrep.sarif)
-            FILE=$(jq -r '.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri' semgrep.sarif)
-            curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
-              -H "Content-Type: application/json" \
-              -d "{\"scan_type\": \"cve\", \"source\": \"semgrep\", \"rule\": \"$RULE\", \"file\": \"$FILE\", \"repo\": \"${{ github.repository }}\"}"
+          HIGH_COUNT=$(jq '
+            [.runs[0].results[]? as $r
+              | (.runs[0].tool.driver.rules[]? | select(.id == $r.ruleId) | .defaultConfiguration.level // "warning") as $lvl
+              | select($lvl == "error")
+            ] | length
+          ' semgrep.sarif 2>/dev/null || echo 0)
+          if [ "$HIGH_COUNT" -gt 0 ]; then
+            RULE=$(jq -r '
+              [.runs[0].results[]? as $r
+                | (.runs[0].tool.driver.rules[]? | select(.id == $r.ruleId) | .defaultConfiguration.level // "warning") as $lvl
+                | select($lvl == "error") | $r.ruleId
+              ][0]
+            ' semgrep.sarif)
+            FILE=$(jq -r '
+             [.runs[0].results[]? as $r
+               | (.runs[0].tool.driver.rules[]? | select(.id == $r.ruleId) | .defaultConfiguration.level // "warning") as $lvl
+               | select($lvl == "error") | $r.locations[0].physicalLocation.artifactLocation.uri
+             ][0]
+           ' semgrep.sarif)
+           curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
+             -H "Content-Type: application/json" \
+             -d "{\"scan_type\": \"cve\", \"source\": \"semgrep\", \"rule\": \"$RULE\", \"file\": \"$FILE\", \"repo\": \"${{ github.repository }}\"}"
           fi
       
       - name: Enforce severity gate
         run: |
-          HIGH_COUNT=$(jq '[.runs[0].results[]? | select(.level=="error")] | length' semgrep.sarif 2>/dev/null || echo 0)
+          HIGH_COUNT=$(jq '
+            [.runs[0].results[]? as $r
+              | (.runs[0].tool.driver.rules[]? | select(.id == $r.ruleId) | .defaultConfiguration.level // "warning") as $lvl
+              | select($lvl == "error")
+            ] | length
+          ' semgrep.sarif 2>/dev/null || echo 0)
           if [ "$HIGH_COUNT" -gt 0 ]; then
             echo "BLOCKED: $HIGH_COUNT high-severity Semgrep finding(s) detected."
             exit 1
@@ -64,9 +84,9 @@ jobs:
 
       - name: Send to Shuffle
         run: |
-          FINDINGS=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results.json 2>/dev/null || echo 0)
+          FINDINGS=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-results.json 2>/dev/null || echo 0)
           if [ "$FINDINGS" -gt 0 ]; then
-            CVE_ID=$(jq -r '[.Results[]?.Vulnerabilities[]?][0].VulnerabilityID' trivy-results.json)
+            CVE_ID=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")][0].VulnerabilityID // "N/A"' trivy-results.json)
             curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
               -H "Content-Type: application/json" \
               -d "{\"scan_type\": \"cve\", \"source\": \"trivy\", \"cve_id\": \"$CVE_ID\", \"repo\": \"${{ github.repository }}\"}"

@@ -150,6 +150,7 @@ jobs:
           done
 
       - name: Run ZAP Full Scan
+        timeout-minutes: 15
         uses: zaproxy/action-full-scan@v0.13.0
         continue-on-error: true
         with:

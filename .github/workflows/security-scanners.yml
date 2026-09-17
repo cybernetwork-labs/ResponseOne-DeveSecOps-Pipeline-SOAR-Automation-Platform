@@ -81,6 +81,7 @@ jobs:
           scan-type: fs
           format: json
           output: trivy-results.json
+          skip-files: app/owasp-juice-shop/package-lock.json
 
       - name: Send to Shuffle
         run: |

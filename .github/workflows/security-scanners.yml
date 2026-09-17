@@ -154,6 +154,8 @@ jobs:
         continue-on-error: true
         with:
           target: 'http://localhost:3000'
+          cmd_options: '-J report_json.json -w report_md.md -r report_html.html'
+          cmd_options: '-J report_json.json -w report_md.md -r report_html.html'
 
       - name: Send to Shuffle
         run: |

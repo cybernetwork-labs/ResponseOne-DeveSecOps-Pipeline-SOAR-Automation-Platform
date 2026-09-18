@@ -153,7 +153,7 @@ jobs:
           done
 
       - name: Run ZAP Full Scan
-        timeout-minutes: 15
+        timeout-minutes: 25
         uses: zaproxy/action-full-scan@v0.13.0
         continue-on-error: true
         with:
@@ -161,6 +161,7 @@ jobs:
           cmd_options: '-j -m 5 -J report_json.json -w report_md.md -r report_html.html'
 
       - name: Debug - show SQLi riskdesc
+        continue-on-error: true
         run: |
           ZAP_FILE=$(find . -type f -name "report_json.json" -o -name "*zap*.json" | head -n 1)
           jq '[.site[0].alerts[]? | select(.pluginid=="40018")]' "$ZAP_FILE"

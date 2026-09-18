@@ -164,16 +164,16 @@ jobs:
         continue-on-error: true
         run: |
           ZAP_FILE=$(find . -type f -name "report_json.json" -o -name "*zap*.json" | head -n 1)
-          jq '[.site[0].alerts[]? | select(.pluginid=="40018")]' "$ZAP_FILE"
+          jq '[.site[] | select(.["@name"] == "http://localhost:3000") | .alerts[]? | select(.pluginid=="40018")]' "$ZAP_FILE"
 
       - name: Send to Shuffle
         run: |
           ZAP_FILE=$(find . -type f -name "report_json.json" -o -name "*zap*.json" | head -n 1)
           if [ -n "$ZAP_FILE" ]; then
-            HIGH_COUNT=$(jq '[.site[0].alerts[]? | select(.riskdesc | startswith("High"))] | length' "$ZAP_FILE" 2>/dev/null || echo 0)
+            HIGH_COUNT=$(jq '[.site[] | select(.["@name"] == "http://localhost:3000") | .alerts[]? | select(.riskdesc | startswith("High"))] | length' "$ZAP_FILE" 2>/dev/null || echo 0)
             if [ "$HIGH_COUNT" -gt 0 ]; then
-              ALERT_NAME=$(jq -r '[.site[0].alerts[]? | select(.riskdesc | startswith("High"))][0].name' "$ZAP_FILE")
-              RISK=$(jq -r '[.site[0].alerts[]? | select(.riskdesc | startswith("High"))][0].riskdesc' "$ZAP_FILE")
+              ALERT_NAME=$(jq -r '[.site[] | select(.["@name"] == "http://localhost:3000") | .alerts[]? | select(.riskdesc | startswith("High"))][0].name' "$ZAP_FILE")
+              RISK=$(jq -r '[.site[] | select(.["@name"] == "http://localhost:3000") | .alerts[]? | select(.riskdesc | startswith("High"))][0].riskdesc' "$ZAP_FILE")
               curl -X POST "${{ secrets.SHUFFLE_WEBHOOK_URL }}" \
                 -H "Content-Type: application/json" \
                 -d "{\"scan_type\": \"owasp\", \"source\": \"zap\", \"alert_name\": \"$ALERT_NAME\", \"risk_level\": \"$RISK\", \"url\": \"http://localhost:3000\"}"
@@ -184,7 +184,7 @@ jobs:
         run: |
           ZAP_FILE=$(find . -type f -name "report_json.json" -o -name "*zap*.json" | head -n 1)
           if [ -n "$ZAP_FILE" ]; then
-            HIGH_COUNT=$(jq '[.site[0].alerts[]? | select(.riskdesc | startswith("High"))] | length' "$ZAP_FILE" 2>/dev/null || echo 0)
+            HIGH_COUNT=$(jq '[.site[] | select(.["@name"] == "http://localhost:3000") | .alerts[]? | select(.riskdesc | startswith("High"))] | length' "$ZAP_FILE" 2>/dev/null || echo 0)
             if [ "$HIGH_COUNT" -gt 0 ]; then
               echo "BLOCKED: $HIGH_COUNT High-risk ZAP finding(s) detected."
               exit 1

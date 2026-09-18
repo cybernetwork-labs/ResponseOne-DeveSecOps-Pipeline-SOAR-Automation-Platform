@@ -31,6 +31,7 @@ jobs:
           name: semgrep-sarif
           path: semgrep.sarif
 
+
       - name: Send to Shuffle
         run: |
           HIGH_COUNT=$(jq '
@@ -83,6 +84,7 @@ jobs:
           output: trivy-results.json
           skip-files: app/owasp-juice-shop/package-lock.json
 
+
       - name: Send to Shuffle
         run: |
           FINDINGS=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-results.json 2>/dev/null || echo 0)
@@ -113,6 +115,7 @@ jobs:
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz -o gitleaks.tar.gz
           tar -xzf gitleaks.tar.gz gitleaks
           ./gitleaks detect --source . --config .gitleaks.toml --report-format json --report-path gitleaks-results.json --exit-code 0 --redact -v
+
 
       - name: Send to Shuffle
         run: |
@@ -156,6 +159,11 @@ jobs:
         with:
           target: 'http://localhost:3000/rest/products/search?q=test'
           cmd_options: '-j -m 5 -J report_json.json -w report_md.md -r report_html.html'
+
+      - name: Debug - show SQLi riskdesc
+        run: |
+          ZAP_FILE=$(find . -type f -name "report_json.json" -o -name "*zap*.json" | head -n 1)
+          jq '[.site[0].alerts[]? | select(.pluginid=="40018")]' "$ZAP_FILE"
 
       - name: Send to Shuffle
         run: |
